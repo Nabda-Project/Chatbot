@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # app.py
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -40,7 +40,7 @@ def health_check():
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
-=======
+
 # app.py
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -82,4 +82,3 @@ def health_check():
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
->>>>>>> 8d704fe37ec636977803dc35e9b97c356c80eb48
