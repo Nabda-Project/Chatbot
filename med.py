@@ -1,26 +1,15 @@
-# med.py
 import json
 import os
 import re
 import unicodedata
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
-import google.generativeai as genai
 
-# ================== CONFIG ==================
+# ==================== CONFIG ====================
 load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-model = genai.GenerativeModel(
-    "models/gemini-2.0-flash-exp",
-    generation_config={
-        "temperature": 0.3,
-        "top_p": 0.8,
-        "top_k": 40,
-    }
-)
-
-# ================== CONSTANTS ==================
+# ==================== STAGES ====================
 STAGES = [
     "GREETING",
     "BASIC_INFO",
@@ -35,22 +24,160 @@ STAGES = [
     "PREVIOUS_HEART_ISSUES",
     "CURRENT_SYMPTOMS",
     "FINAL_QUESTIONS",
-    "SUMMARY",
 ]
 
-SYMPTOM_LABELS = {
-    "chest_pain": "ألم في الصدر",
-    "shortness_of_breath": "ضيق في التنفس",
-    "palpitations": "خفقان القلب",
-    "dizziness": "دوخة",
-    "fainting": "إغماء",
-    "fatigue": "تعب غير معتاد",
-    "swelling": "تورم القدمين/الساقين",
-    "nausea": "غثيان",
-    "sweating": "تعرق شديد",
+STAGE_QUESTIONS = {
+    "GREETING": {
+        "message": "مرحباً بك في مساعد القلب الذكي 👋\nسأسألك بعض الأسئلة الطبية البسيطة لمساعدة طبيب القلب.\nهل أنت مستعد؟ (أكتب أي شيء للمتابعة)"
+    },
+    
+    "BASIC_INFO": {
+        "questions": [
+            {
+                "field": "basic_info.age",
+                "q": "كم عمرك؟",
+                "v": "number",
+                "min": 1,
+                "max": 120
+            },
+            {
+                "field": "basic_info.gender",
+                "q": "ما هو جنسك؟ (ذكر/أنثى)",
+                "v": "choice",
+                "options": {
+                    "ذكر": "male",
+                    "أنثى": "female"
+                }
+            },
+            {
+                "field": "basic_info.weight",
+                "q": "ما هو وزنك بالكيلوجرام؟",
+                "v": "number",
+                "min": 20,
+                "max": 300
+            },
+            {
+                "field": "basic_info.height",
+                "q": "ما هو طولك بالسنتيمتر؟",
+                "v": "number",
+                "min": 100,
+                "max": 250
+            }
+        ]
+    },
+    
+    "SMOKING": {
+        "questions": [
+            {
+                "field": "lifestyle.smoking",
+                "q": "هل تدخن؟ حدثني عن عادة التدخين لديك (نوع وكمية وسنوات)",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "PHYSICAL_ACTIVITY": {
+        "questions": [
+            {
+                "field": "lifestyle.physical_activity",
+                "q": "كم مرة تمارس الرياضة أسبوعياً؟ وما نوعها؟",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "DIET": {
+        "questions": [
+            {
+                "field": "lifestyle.diet",
+                "q": "صف لي نظامك الغذائي في يوم عادي",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "SLEEP": {
+        "questions": [
+            {
+                "field": "lifestyle.sleep",
+                "q": "كم ساعة تنام في اليوم؟ وهل نومك منتظم؟",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "STRESS": {
+        "questions": [
+            {
+                "field": "lifestyle.stress",
+                "q": "كيف تصف مستوى التوتر في حياتك اليومية؟",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "CHRONIC_DISEASES": {
+        "questions": [
+            {
+                "field": "medical_history.chronic_diseases",
+                "q": "هل تعاني من أي أمراض مزمنة مثل السكر أو الضغط أو الكوليسترول؟",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "MEDICATIONS": {
+        "questions": [
+            {
+                "field": "medical_history.current_medications",
+                "q": "هل تتناول أي أدوية بانتظام؟ وما هي؟",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "FAMILY_HISTORY": {
+        "questions": [
+            {
+                "field": "medical_history.family_history",
+                "q": "هل أحد من عائلتك (أب، أم، أخوة) عانى من أمراض القلب؟",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "PREVIOUS_HEART_ISSUES": {
+        "questions": [
+            {
+                "field": "medical_history.previous_heart_issues",
+                "q": "هل سبق وأن عانيت من مشاكل في القلب أو قمت بفحوصات للقلب؟",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "CURRENT_SYMPTOMS": {
+        "questions": [
+            {
+                "field": "symptoms.description",
+                "q": "هل تشعر بأي أعراض حالياً؟ مثل ألم في الصدر، ضيق تنفس، خفقان، دوخة... احكي لي براحتك",
+                "v": "text"
+            }
+        ]
+    },
+    
+    "FINAL_QUESTIONS": {
+        "questions": [
+            {
+                "field": "medical_history.other_concerns",
+                "q": "هل هناك أي شيء آخر تود إضافته أو أي سؤال للطبيب؟",
+                "v": "text"
+            }
+        ]
+    }
 }
 
-# ================== STATE ==================
+# ==================== STATE ====================
 class ConversationState:
     def __init__(self):
         self.stage_index = 0
@@ -62,24 +189,29 @@ class ConversationState:
             "timestamp": datetime.now().isoformat(),
             "basic_info": {},
             "lifestyle": {
-                "smoking": {},
-                "physical_activity": {},
-                "diet": {},
-                "sleep": {},
-                "stress": {},
+                "smoking": "",
+                "physical_activity": "",
+                "diet": "",
+                "sleep": "",
+                "stress": "",
             },
             "medical_history": {
                 "chronic_diseases": "",
                 "current_medications": "",
-                "family_history": {},
-                "previous_heart_issues": {},
+                "family_history": "",
+                "previous_heart_issues": "",
+                "other_concerns": ""
             },
-            "symptoms": {},
+            "symptoms": {
+                "description": ""
+            },
             "conversation_history": [],
         }
 
     def current_stage(self):
-        return STAGES[self.stage_index]
+        if self.stage_index < len(STAGES):
+            return STAGES[self.stage_index]
+        return None
 
     def next_stage(self):
         self.stage_index += 1
@@ -87,12 +219,57 @@ class ConversationState:
         self.current_question = None
         self.retry_count = 0
 
-    def reset(self):
-        self.__init__()
-
 conversation_state = ConversationState()
 
-# ================== HELPERS ==================
+# ==================== PARSERS ====================
+def normalize_arabic(text):
+    if not isinstance(text, str):
+        return ""
+    text = unicodedata.normalize("NFKD", text)
+    text = re.sub(r"[ًٌٍَُِْـ]", "", text)
+    text = text.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    text = text.replace("اً", "ا")
+    text = text.replace("ة", "ه").replace("ى", "ي")
+    return text.lower().strip()
+
+def extract_number(text):
+    nums = re.findall(r"\d+\.?\d*", text)
+    if nums:
+        return float(nums[0])
+    return None
+
+def extract_gender(text):
+    normalized = normalize_arabic(text)
+    male_indicators = ["ذكر", "راجل", "ولد", "رجل"]
+    female_indicators = ["انثى", "أنثى", "ست", "بنت", "انثي"]
+    
+    for word in male_indicators:
+        if normalize_arabic(word) in normalized:
+            return "male"
+    for word in female_indicators:
+        if normalize_arabic(word) in normalized:
+            return "female"
+    return None
+
+def smart_parse(text, qtype, options=None):
+    if not text:
+        return None
+    normalized = normalize_arabic(text)
+    
+    if qtype == "number":
+        return extract_number(text)
+    elif qtype == "choice" and options:
+        for key, value in options.items():
+            if normalize_arabic(key) in normalized:
+                return value
+        if "male" in options.values() and "female" in options.values():
+            gender = extract_gender(text)
+            if gender:
+                return gender
+    elif qtype == "text":
+        return text.strip()
+    return None
+
 def get_nested(data, path):
     cur = data
     for k in path.split("."):
@@ -108,197 +285,166 @@ def set_nested(data, path, value):
         cur = cur.setdefault(k, {})
     cur[keys[-1]] = value
 
-def validate_answer(answer, vtype, **kwargs):
-    answer = answer.strip()
-    if vtype == "number":
-        try:
-            num = float(answer)
-            if kwargs.get("min", -1e9) <= num <= kwargs.get("max", 1e9):
-                return True, num
-            return False, "رقم خارج النطاق"
-        except:
-            return False, "من فضلك أدخل رقم صحيح"
+# ==================== MAIN LOGIC ====================
+def save_conversation():
+    filename = f"patient_data/patient_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    os.makedirs("patient_data", exist_ok=True)
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(conversation_state.data, f, ensure_ascii=False, indent=2)
+    return filename
 
-    if vtype == "choice":
-        options = kwargs.get("options", {})
-        for key, val in options.items():
-            if key.lower() in answer.lower():
-                return True, val
-        return False, "مش فاهمك قوي 🤔 ممكن توضحي أكتر؟"
-
-    if vtype == "text":
-        if len(answer) >= 1:
-            return True, answer
-        return False, "الرجاء كتابة إجابة أوضح"
-
-    return True, answer
-
-def normalize_arabic(text):
-    """Normalize Arabic letters and remove diacritics."""
-    text = unicodedata.normalize("NFKD", text)
-    text = re.sub(r"[ًٌٍَُِْـ]", "", text)  # remove diacritics
-    text = text.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("اً", "ا")
-    text = text.replace("ة", "ه").replace("ى", "ي")
-    return text.lower().strip()
-def smart_parse(text, qtype, options=None):
-    t = normalize_arabic(text)
-
-    if qtype == "number":
-        nums = re.findall(r"\d+\.?\d*", t)
-        if nums:
-            return float(nums[0])
-
-    if qtype == "choice" and options:
-        for k, v in options.items():
-            if normalize_arabic(k) in t:
-                return v
-
-        synonyms = {
-            "male": ["ذكر", "راجل", "ولد"],
-            "female": ["انثى", "أنثى", "ست", "بنت"],
-        }
-
-        for val, words in synonyms.items():
-            if any(normalize_arabic(w) in t for w in words):
-                return val
-
-    if qtype == "text":
-        return text.strip()
-
-    return None
-
-
-# ================== QUESTIONS ==================
-STAGE_QUESTIONS = {
-    "GREETING": {"message": "مرحباً 👋\nسأسألك بعض الأسئلة الطبية البسيطة لمساعدة طبيب القلب.\nهل أنت مستعد؟ (نعم)"},
-    "BASIC_INFO": {
-        "questions": [
-            {"field": "basic_info.age", "q": "كم عمرك؟", "v": "number", "min": 1, "max": 120},
-            {"field": "basic_info.gender", "q": "الجنس؟ (ذكر/أنثى)", "v": "choice",
-             "options": {"ذكر": "male", "أنثى": "female"}},
-            {"field": "basic_info.weight", "q": "الوزن (كجم)؟", "v": "number", "min": 20, "max": 300},
-            {"field": "basic_info.height", "q": "الطول (سم)؟", "v": "number", "min": 100, "max": 250},
-        ]
-    },
-    "SMOKING": {
-        "questions": [
-            {"field": "lifestyle.smoking.status", "q": "هل تدخن؟ (لا / نعم / توقفت)", "v": "choice",
-             "options": {"لا": "never", "نعم": "current", "توقفت": "quit"}},
-        ],
-        "follow": {
-            "current": [
-                {"field": "lifestyle.smoking.cigs", "q": "عدد السجائر يومياً؟", "v": "number"},
-                {"field": "lifestyle.smoking.years", "q": "منذ كم سنة؟", "v": "number"},
-            ],
-            "quit": [
-                {"field": "lifestyle.smoking.quit_years", "q": "منذ كم سنة توقفت؟", "v": "number"}
-            ]
-        }
-    },
-    "PHYSICAL_ACTIVITY": {
-        "questions": [
-            {"field": "lifestyle.physical_activity.level", "q": "مستوى النشاط؟ (قليل / متوسط / عالي)", "v": "choice",
-             "options": {"قليل": "low", "متوسط": "moderate", "عالي": "high"}},
-        ],
-        "follow": {
-            "moderate": [
-                {"field": "lifestyle.physical_activity.type", "q": "نوع الرياضة؟", "v": "text"},
-                {"field": "lifestyle.physical_activity.duration", "q": "المدة بالدقائق؟", "v": "number"},
-            ],
-            "high": [
-                {"field": "lifestyle.physical_activity.type", "q": "نوع الرياضة؟", "v": "text"},
-                {"field": "lifestyle.physical_activity.duration", "q": "المدة بالدقائق؟", "v": "number"},
-            ],
-        }
-    },
-    "DIET": {
-        "questions": [
-            {"field": "lifestyle.diet.salt", "q": "كمية الملح؟ (قليلة/متوسطة/كثيرة)", "v": "choice",
-             "options": {"قليلة": "low", "متوسطة": "moderate", "كثيرة": "high"}},
-            {"field": "lifestyle.diet.fat", "q": "أطعمة دهنية؟ (نادر/أحياناً/كثير)", "v": "choice",
-             "options": {"نادر": "low", "أحياناً": "moderate", "كثير": "high"}},
-        ]
-    },
-    "SLEEP": {"questions": [{"field": "lifestyle.sleep.hours", "q": "كم ساعة تنام؟", "v": "number", "min": 1, "max": 24}]},
-    "STRESS": {"questions": [{"field": "lifestyle.stress.level", "q": "مستوى التوتر؟ (منخفض/متوسط/عالي)", "v": "choice",
-                               "options": {"منخفض": "low", "متوسط": "moderate", "عالي": "high"}}]},
-    "CHRONIC_DISEASES": {"questions": [{"field": "medical_history.chronic_diseases", "q": "هل لديك أمراض مزمنة؟", "v": "text"}]},
-    "MEDICATIONS": {"questions": [{"field": "medical_history.current_medications", "q": "هل تتناول أدوية حالياً؟", "v": "text"}]},
-    "FAMILY_HISTORY": {"questions": [{"field": "medical_history.family_history.heart", "q": "تاريخ عائلي لأمراض القلب؟", "v": "text"}]},
-    "PREVIOUS_HEART_ISSUES": {"questions": [{"field": "medical_history.previous_heart_issues.history", "q": "هل عانيت من مشاكل قلبية سابقاً؟", "v": "text"}]},
-    "CURRENT_SYMPTOMS": {"questions": [{"field": "symptoms.raw", "q": "هل تشعر بأي أعراض حالياً؟ احكي براحتك", "v": "text"}]},
-    "FINAL_QUESTIONS": {"questions": [{"field": "additional_info", "q": "هل تريد إضافة أي شيء؟", "v": "text"}]},
-}
-
-# ================== SYMPTOM EXTRACTION ==================
-def extract_symptoms(text):
-    prompt = f"استخرج أعراض القلب فقط من النص التالي بصيغة JSON:\n{text}"
-    try:
-        r = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-        return json.loads(r.text)
-    except:
-        return {}
-
-# ================== CORE ==================
-def handle_message(user_msg=""):
+def get_next_question():
     state = conversation_state
     stage = state.current_stage()
-
-    # Greeting
+    
+    if stage is None:
+        return None
+    
+    # Handle GREETING
     if stage == "GREETING":
-        state.next_stage()
         return STAGE_QUESTIONS["GREETING"]["message"]
-
-    # Handle answer
-    if user_msg and state.current_field:
-        q = state.current_question
-        parsed = smart_parse(user_msg, q["v"], q.get("options"))
-        if parsed is not None:
-            set_nested(state.data, q["field"], parsed)
-            state.current_field = None
-            state.current_question = None
-        else:
-            return "مش فاهمك قوي 🤔 ممكن توضحي أكتر؟"
-
+    
+    # If we're in the middle of a question, wait for answer
+    if state.current_field:
+        return None
+    
+    # Get questions for current stage
     block = STAGE_QUESTIONS.get(stage)
-
-    # Ask main questions
     if block and "questions" in block:
         for q in block["questions"]:
-            if get_nested(state.data, q["field"]) is None:
+            if get_nested(state.data, q["field"]) is None or get_nested(state.data, q["field"]) == "":
                 state.current_field = q["field"]
                 state.current_question = q
                 return q["q"]
-
-    # Ask follow-up questions
-    if block and "follow" in block:
-        main_q = block["questions"][0]
-        main_val = get_nested(state.data, main_q["field"])
-        follow_qs = block["follow"].get(main_val, [])
-        for fq in follow_qs:
-            if get_nested(state.data, fq["field"]) is None:
-                state.current_field = fq["field"]
-                state.current_question = fq
-                return fq["q"]
-
-    # Extract symptoms after CURRENT_SYMPTOMS
-    if stage == "CURRENT_SYMPTOMS":
-        raw = state.data.get("symptoms", {}).get("raw", "")
-        if raw and "structured" not in state.data["symptoms"]:
-            state.data["symptoms"]["structured"] = extract_symptoms(raw)
-
-    # Move to next stage
+    
+    # No more questions in this stage - move to next
     state.next_stage()
-    return handle_message()
+    
+    # Recursively get next question
+    return get_next_question()
 
-# ================== RUN ==================
-if __name__ == "__main__":
-    print("🤖 مساعد القلب الذكي\n")
-    msg = handle_message()
-    print(msg)
+def generate_summary():
+    """Generate a simple summary"""
+    state = conversation_state
+    data = state.data
+    
+    summary = f"""
+📋 ملخص معلومات المريض:
 
+👤 المعلومات الأساسية:
+• العمر: {data['basic_info'].get('age', 'غير محدد')}
+• الجنس: {data['basic_info'].get('gender', 'غير محدد')}
+• الوزن: {data['basic_info'].get('weight', 'غير محدد')} كجم
+• الطول: {data['basic_info'].get('height', 'غير محدد')} سم
+
+🚬 التدخين: {data['lifestyle'].get('smoking', 'لم يذكر')}
+🏃 النشاط البدني: {data['lifestyle'].get('physical_activity', 'لم يذكر')}
+🥗 النظام الغذائي: {data['lifestyle'].get('diet', 'لم يذكر')}
+😴 النوم: {data['lifestyle'].get('sleep', 'لم يذكر')}
+😰 التوتر: {data['lifestyle'].get('stress', 'لم يذكر')}
+
+💊 الأمراض المزمنة: {data['medical_history'].get('chronic_diseases', 'لا يوجد')}
+💉 الأدوية: {data['medical_history'].get('current_medications', 'لا يوجد')}
+👪 التاريخ العائلي: {data['medical_history'].get('family_history', 'لم يذكر')}
+❤️ مشاكل القلب السابقة: {data['medical_history'].get('previous_heart_issues', 'لم يذكر')}
+
+🤒 الأعراض الحالية: {data['symptoms'].get('description', 'لا توجد')}
+
+ℹ️ ملاحظات إضافية: {data['medical_history'].get('other_concerns', 'لا يوجد')}
+"""
+    return summary
+
+def handle_message(user_msg=""):
+    state = conversation_state
+    
+    # Save user message
+    if user_msg:
+        state.data["conversation_history"].append({
+            "role": "user",
+            "content": user_msg,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    # Handle current question
+    if state.current_field and state.current_question:
+        q = state.current_question
+        parsed = smart_parse(user_msg, q["v"], q.get("options"))
+        
+        if parsed is not None:
+            # Validate numbers
+            if q["v"] == "number":
+                if "min" in q and parsed < q["min"]:
+                    return f"❌ القيمة صغيرة جداً. {q['q']}"
+                if "max" in q and parsed > q["max"]:
+                    return f"❌ القيمة كبيرة جداً. {q['q']}"
+            
+            set_nested(state.data, q["field"], parsed)
+            state.current_field = None
+            state.current_question = None
+            state.retry_count = 0
+        else:
+            state.retry_count += 1
+            if state.retry_count >= state.max_retries:
+                set_nested(state.data, q["field"], user_msg)
+                state.current_field = None
+                state.current_question = None
+                state.retry_count = 0
+                return "✅ تمام، هسجل الرد زي ما هو."
+            return f"🤔 مش فاهمك قوي. {q['q']}"
+    
+    # Handle greeting stage
+    if state.current_stage() == "GREETING" and user_msg:
+        state.next_stage()
+    
+    # Get next question
+    next_q = get_next_question()
+    
+    if next_q is None:
+        # Conversation complete
+        summary = generate_summary()
+        filename = save_conversation()
+        return f"{summary}\n\n✅ شكراً لمشاركتك! تم حفظ المحادثة في {filename}"
+    
+    # Save bot message
+    state.data["conversation_history"].append({
+        "role": "bot",
+        "content": next_q,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    return next_q
+
+# ==================== MAIN ====================
+def main():
+    logging.basicConfig(level=logging.INFO)
+    
+    print("=" * 60)
+    print("🤖 مساعد القلب الذكي - Smart Heart Assistant")
+    print("=" * 60)
+    print("اكتب 'خروج' للإنهاء، 'حفظ' لحفظ المحادثة\n")
+    
+    # Start conversation
+    response = handle_message()
+    print(f"🤖: {response}")
+    
     while True:
-        user = input("أنت: ")
-        if user.lower() in ["exit", "quit"]:
+        user_input = input("👤: ").strip()
+        
+        if user_input.lower() in ['خروج', 'exit', 'quit']:
+            filename = save_conversation()
+            print(f"🤖: مع السلامة! تم حفظ المحادثة في {filename} 👋")
             break
-        print("🤖", handle_message(user))
+        
+        if user_input.lower() == 'حفظ':
+            filename = save_conversation()
+            print(f"🤖: تم حفظ المحادثة في {filename} ✅")
+            continue
+        
+        if not user_input:
+            continue
+        
+        response = handle_message(user_input)
+        print(f"🤖: {response}")
+
+if __name__ == "__main__":
+    main()
