@@ -1,0 +1,23 @@
+{
+  "basic_info": {
+    "gender": "انثس",
+    "age": 10.0,
+    "weight": 50.0,
+    "height": 170.0
+  },
+  "lifestyle": {
+    "smoking": "لا",
+    "physical_activity": "لا امارس الريلضة"
+  },
+  "medical_history": {
+    "chronic": "سكري",
+    "meds": "انسولين",
+    "family": "لا"
+  },
+  "symptoms": {
+    "desc": "خفقان"
+  },
+  "history": [
+    "start"
+  ]
+}
