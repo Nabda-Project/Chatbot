@@ -1,11 +1,19 @@
 import json
+import time
 import os
 import re
 import unicodedata
 import logging
+import requests
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ==================== CONFIG & STAGES ====================
+# Configurable patient ID for Spring Boot backend
+PATIENT_ID = "27"  # Change this to your patient ID
+
 STAGES = [
     "GREETING",
     "BASIC_INFO",
@@ -115,15 +123,36 @@ class ConversationState:
         self.current_field = None
         self.current_question = None
         self.data = {"basic_info": {}, "lifestyle": {}, "medical_history": {}, "symptoms": {}, "history": []}
+        self.last_active = time.time()
 
     def next_stage(self):
         self.stage_index += 1
         self.current_field = None
 
-conversation_state = ConversationState()
+    def reset(self):
+        self.__init__()
 
-def handle_message(user_msg=""):
-    state = conversation_state
+states = {}
+
+def get_state(session_id):
+    current_time = time.time()
+    # Clean up sessions older than 2 hours (7200 seconds)
+    expired = [sid for sid, s in states.items() if current_time - s.last_active > 7200]
+    for sid in expired:
+        del states[sid]
+        
+    if session_id not in states:
+        states[session_id] = ConversationState()
+    else:
+        states[session_id].last_active = current_time
+    return states[session_id]
+
+def reset_state(session_id):
+    if session_id in states:
+        del states[session_id]
+
+def handle_message(session_id, user_msg=""):
+    state = get_state(session_id)
     
     # Process Answer
     if state.current_field:
@@ -172,12 +201,27 @@ def handle_message(user_msg=""):
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(state.data, f, ensure_ascii=False, indent=2)
 
+    # Send data to backend
+    try:
+        backend_url = os.getenv("BACKEND_URL")
+        patient_id = os.getenv("BACKEND_PATIENT_ID", "1")
+        resp = requests.post(
+            f"{backend_url}/api/chatbot/complete?patientId={patient_id}",
+            headers={"Content-Type": "application/json"},
+            data=json.dumps({"patientInput": json.dumps(state.data)})
+        )
+        print(f"Backend response: {resp.status_code}")
+    except Exception as e:
+        print(f"Backend call failed: {e}")
+
     return f"📋 **انتهينا! إليك ملخصك الطبي:**\n{advice}\n{tips}\n\n⚠️ **تنبيه:** هذه المعلومات استرشادية ولا تغني عن زيارة الطبيب. في حال وجود ألم شديد بالصدر توجه للطوارئ فوراً.\n✅ تم حفظ تقريرك في النظام."
 
 # ==================== RUNNER ====================
 if __name__ == "__main__":
+    import uuid
+    test_session = str(uuid.uuid4())
     print("--- بوت مساعد القلب الطبي يبدأ الآن ---")
-    print(handle_message()) # الترحيب
-    while conversation_state.stage_index < len(STAGES) or conversation_state.current_field:
+    print(handle_message(test_session)) # الترحيب
+    while get_state(test_session).stage_index < len(STAGES) or get_state(test_session).current_field:
         user_input = input("المريض: ")
-        print(f"البوت: {handle_message(user_input)}")
+        print(f"البوت: {handle_message(test_session, user_input)}")
