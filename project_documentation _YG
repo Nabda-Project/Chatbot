@@ -1,0 +1,263 @@
+# Smart Heart Assistant — Full Project Documentation
+
+---
+
+## 1. Project Overview
+
+This project is a **Flask-based conversational chatbot** that guides Arabic-speaking users through a structured medical intake questionnaire focused on **heart health**. At the end of the conversation, it generates personalized cardiovascular advice, saves the collected patient data as a JSON report, and instantly relays the findings to a primary Java Spring Boot backend database.
+
+### Core Idea
+
+Instead of filling out a boring medical form, the patient chats with a friendly bot in Arabic. The bot asks questions one-by-one across 7 stages (greeting → demographics → lifestyle → medical history → symptoms), validates answers in real-time, and finishes with a tailored health summary securely linked to a concurrent session.
+
+---
+
+## 2. Folder Structure
+
+```
+Chatbot/
+├── .env                          # Environment variables (API keys)
+├── .gitignore                    # Git ignore rules
+├── README.md                     # Project README
+├── requirements.txt              # Python dependencies
+├── app.py                        # Flask web server & API routes
+├── med.py                        # Chatbot engine (state machine, parsing, medical logic)
+├── templates/
+│   └── index.html                # Frontend chat UI (HTML + CSS + JS)
+├── patient_data/                 # Older/alternative patient data storage
+│   └── patient_20260212_*.json   # Sample patient record (extended format)
+└── patient_records/              # Auto-generated reports from completed conversations
+    ├── report_215742.json
+    └── report_220614.json
+```
+
+---
+
+## 3. File-by-File Breakdown
+
+---
+
+### 3.1 `app.py` — Flask Web Server
+
+This is the **entry point** of the application. It sets up a Flask web server with 4 API routes.
+
+#### Imports & Setup
+
+```python
+from flask import Flask, request, jsonify, render_template, session
+from flask_cors import CORS
+from med import handle_message, reset_state
+import uuid
+```
+
+- **Flask** — lightweight Python web framework.
+- **Flask-CORS** — enables Cross-Origin Resource Sharing so the frontend can call the API.
+- **`uuid` / `session`** — tracks parallel concurrent chats so multiple users can talk to the bot simultaneously without overriding each other's progress.
+- **`handle_message`** — the main chatbot function imported from `med.py`.
+
+#### Configuration
+
+```python
+app.secret_key = secrets.token_hex(32)                    # Random session key
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)  # 2-hour sessions
+CORS(app, supports_credentials=True)                      # Allow cross-origin requests
+```
+
+#### API Routes
+
+| Route | Method | What It Does |
+|-------|--------|-------------|
+| `/` | GET | Serves the `index.html` chat UI |
+| `/chat` | POST | Automatically establishes a session ID, intercepts user's message, pings the agent in `med.py` with this session ID, and returns the bot's reply |
+| `/reset` | POST | Captures the request's specific session ID and deletes it, forcing the chatbot back to stage 0 |
+| `/health` | GET | Simple health-check endpoint returning `{"status": "healthy"}` |
+
+---
+
+### 3.2 `med.py` — Chatbot Engine (Core Logic)
+
+This is the **brain** of the application. It contains everything: the question definitions, Arabic text processing, state machines natively tied to UUIDs, input validation, medical advice generation, and API relay architecture.
+
+#### 3.2.1 Stage & Question Configuration
+
+The conversation is organized as a **linear state machine** with 7 stages:
+
+```python
+STAGES = [
+    "GREETING",          # Welcome message
+    "BASIC_INFO",        # Gender, age, weight, height
+    "SMOKING",           # Smoking habits
+    "PHYSICAL_ACTIVITY", # Exercise frequency
+    "MEDICAL_HISTORY",   # Chronic diseases, medications
+    "FAMILY_HISTORY",    # Heart disease in family
+    "CURRENT_SYMPTOMS",  # Current complaints
+]
+```
+
+Each stage (except GREETING) has a list of **questions** defined in `STAGE_QUESTIONS`. Each question is a dict with:
+
+| Key | Description | Example |
+|-----|-------------|---------|
+| `field` | Dot-notation path in the data dict | `"basic_info.age"` |
+| `q` | The Arabic question text | `"كم عمرك؟"` |
+| `v` | Validation type: `"number"`, `"choice"`, or `"text"` | `"number"` |
+| `options` | (choice only) Mapping of Arabic answers to English values | `{"ذكر": "male", "أنثى": "female"}` |
+| `min` / `max` | (number only) Valid range | `min: 1, max: 110` |
+
+---
+
+#### 3.2.2 Helper Functions
+
+##### `normalize_arabic(text)` — Arabic Text Normalization
+Strips diacritics, processes hamzas, transforms taa-marbutas, and lowercases text so the bot can safely map variations of standard inputs seamlessly.
+
+##### `smart_parse(text, qtype, options)` — Input Parser
+Handles string scraping tailored by the question's required type (`number`, `choice`, `text`).
+
+---
+
+#### 3.2.3 Medical Logic
+
+##### `generate_medical_advice(data)`
+Analyzes the collected patient data and generates Arabic health advice covering weight (BMI), smoking flags, and urgent symptom checking (chest pain, breathlessness).
+
+##### `generate_general_tips()`
+Returns a fixed block of general cardiovascular advice in Arabic on diet and lifestyle.
+
+---
+
+#### 3.2.4 Session & State Management
+
+##### `ConversationState` Class
+
+```python
+class ConversationState:
+    def __init__(self):
+        self.stage_index = 0          # Which stage we're on (0 = GREETING)
+        self.current_field = None     # Which field we're waiting for an answer to
+        self.current_question = None  # The current question dict
+        self.data = {                 # Collected patient data
+            "basic_info": {}, "lifestyle": {}, "medical_history": {},
+            "symptoms": {}, "history": []
+        }
+        self.last_active = time.time()
+        
+    def next_stage(self):
+        # advances pointer
+        
+    def reset(self):
+        self.__init__() # Wipes data clean
+```
+
+> [!TIP]
+> **Scaling:** To handle multiple concurrent patients without collisions, the global fallback state was removed. `med.py` now maps `states = {}` tracking live session instances globally. The helper function `get_state(session_id)` scrubs older idle instances recursively using an automatic 2-hour timeout.
+
+---
+
+#### 3.2.5 Backend Relay System & Core Loop
+
+```mermaid
+flowchart TD
+    A[Receive user message & fetch session] --> B{Is there a pending question?}
+    B -->|Yes| C[Parse & validate the answer]
+    C --> D{Valid answer?}
+    D -->|No| E[Return error + repeat question]
+    D -->|Yes| F[Store answer in data dict]
+    F --> G{More questions in current stage?}
+    B -->|No| G
+    G -->|Yes| H[Return next question]
+    G -->|No| I[Move to next stage]
+    I --> J{More stages?}
+    J -->|Yes| G
+    J -->|No| K[Generate final report]
+    K --> L[Relay POST JSON to specific Spring Boot User Backend]
+    K --> M[Return medical advice + tips]
+```
+
+At the finish line (`state_index == len(STAGES)`), `handle_message()` does two vital background operations:
+1. Emits the object into an isolated log under `patient_records/`.
+2. Connects dynamically to Python's `os.getenv("BACKEND_URL")` with fallback routes, appending a `patientInput` JSON string into an established Java Spring Boot controller via `/api/chatbot/complete?patientId={PATIENT_ID}`.
+
+---
+
+### 3.3 `templates/index.html` — Frontend Chat UI
+
+A **single-page application** (558 lines) that provides a polished Arabic chat interface. All CSS and JavaScript are inline, supporting beautiful purple-blue gradients, bouncy typing indicators, full Arabic language directionality (`dir="rtl"`), scalable mobile breakpoints, and dynamic simulation buttons.
+
+> [!WARNING]
+> The UI includes an extra `/vitals` route ping endpoint simulation that is currently not handled or intercepted by Python codebase APIs. This acts only as a frontend placeholder right now.
+
+---
+
+## 4. Architecture Diagram
+
+```mermaid
+graph LR
+    subgraph Frontend
+        A["index.html<br/>(Browser)"]
+    end
+
+    subgraph Mid-Tier Bot
+        B["app.py<br/>(Flask Routes / Session Tracker)"]
+        C["med.py<br/>(NLP State Engine)"]
+    end
+
+    subgraph Main Backend
+        D["Spring Boot Java Controller<br/>(/api/chatbot/...)"]
+    end
+
+    A -->|"POST /chat<br/>{message: '...', cookies}"| B
+    B -->|"handle_message(sid, msg)"| C
+    C -->|"POST API Relay"| D
+    C -->|"Return reply"| B
+    B -->|"JSON response"| A
+```
+
+---
+
+## 5. Conversation Flow — Complete Walkthrough
+
+| Stage | Question (Arabic) | Translation | Validation |
+|-------|-------------------|-------------|------------|
+| **GREETING** | مرحباً بك في مساعد القلب الذكي 🫀 | Welcome to the Smart Heart Assistant | Any input to proceed |
+| **BASIC_INFO** | ما هو جنسك؟ (ذكر/أنثى) | What is your gender? | Choice: male/female |
+| | كم عمرك؟ | How old are you? | Number: 1–110 |
+| | ما هو وزنك بالكيلوجرام؟ | What is your weight in kg? | Number: 30–250 |
+| | ما هو طولك بالسنتيمتر؟ | What is your height in cm? | Number: 100–220 |
+| **SMOKING** | هل أنت مدخن حالي / سابق / غير مدخن؟ | Are you a current/former/non-smoker? | Free text |
+| **PHYSICAL_ACTIVITY** | هل تمارس رياضة المشي أو أي نشاط بدني بانتظام؟ | Do you exercise regularly? How often? | Free text |
+| **MEDICAL_HISTORY** | هل تعاني من سكري، ضغط مرتفع، أو كوليسترول؟ | Do you have diabetes, hypertension, or cholesterol? | Free text |
+| | ما هي الأدوية التي تتناولها بانتظام؟ | What medications do you take regularly? | Free text |
+| **FAMILY_HISTORY** | هل هناك تاريخ عائلي لأمراض القلب؟ | Is there family history of heart disease? | Free text |
+| **CURRENT_SYMPTOMS** | هل تشعر بنهجان، ألم في الصدر، خفقان، أو تورم؟ | Do you feel breathlessness, chest pain, palpitations, or swelling? | Free text |
+
+---
+
+## 6. How to Run
+
+```bash
+# 1. Create virtual environment
+python -m venv .venv
+
+# 2. Activate it (Windows)
+.venv\Scripts\activate
+
+# 3. Setup Env and install deps
+pip install -r requirements.txt
+
+# 4. Run the web server
+python app.py
+# → Open http://localhost:5000
+```
+
+---
+
+## 7. Known Issues & Improvement Opportunities
+
+| Issue | Description |
+|-------|-------------|
+| **Missing `/vitals` endpoint** | The frontend has a "Simulate Vitals" button that calls `/vitals`, but this route doesn't exist in `app.py` |
+| **No progress tracking** | The frontend expects `data.progress` from the API, but the backend never sends it |
+| **Merge conflict in `.env`** | The `.env` file has unresolved git merge conflict markers that should be resolved before deployment |
+| **Unused dependencies** | `google-generativeai` and other packages are installed but not used in the current rule-based iteration |
+| **Schema mismatch** | `patient_data/` and `patient_records/` use different schemas, suggesting older legacy records that haven't been ported |
