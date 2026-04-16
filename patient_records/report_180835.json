@@ -1,0 +1,23 @@
+{
+  "basic_info": {
+    "gender": "male",
+    "age": 23.0,
+    "weight": 95.0,
+    "height": 174.0
+  },
+  "lifestyle": {
+    "smoking": "مدخن حالي",
+    "physical_activity": "نعم"
+  },
+  "medical_history": {
+    "chronic": "لا",
+    "meds": "لا",
+    "family": "لا"
+  },
+  "symptoms": {
+    "desc": "لا"
+  },
+  "history": [
+    "start"
+  ]
+}
