@@ -31,28 +31,6 @@ STAGE_QUESTIONS = {
     # -------------------------------------------------------------------------
     "DEMOGRAPHICS": [
         {
-            "field": "demographics.subject",
-            "q": "الأعراض التي ستصفها لمن؟",
-            "v": "choice",
-            "options": {
-                "لي أنا": "self",
-                "لشخص آخر (ابن/ابنة، والد/والدة، زوج/زوجة، قريب)": "other",
-            },
-        },
-        {
-            "field": "demographics.age",
-            "q": "كم العمر بالسنوات؟",
-            "v": "number",
-            "min": 1,
-            "max": 110,
-        },
-        {
-            "field": "demographics.sex",
-            "q": "الجنس؟",
-            "v": "choice",
-            "options": {"ذكر": "male", "أنثى": "female"},
-        },
-        {
             "field": "demographics.pregnancy",
             "q": "هل أنتِ حامل حالياً أو في فترة ما بعد الولادة (خلال 6 أسابيع)؟",
             "v": "choice",
@@ -72,13 +50,6 @@ STAGE_QUESTIONS = {
             "v": "number",
             "min": 30,
             "max": 250,
-        },
-        {
-            "field": "demographics.height_cm",
-            "q": "ما هو طولك بالسنتيمتر؟",
-            "v": "number",
-            "min": 100,
-            "max": 220,
         },
     ],
 
@@ -112,6 +83,7 @@ STAGE_QUESTIONS = {
                 "هولتر (رسم قلب لمدة 24 ساعة)": "holter",
                 "رسم قلب بالمجهود": "stress",
                 "قسطرة تشخيصية": "cath",
+                "اخرى" :"others",
             },
         },
         {
@@ -128,6 +100,7 @@ STAGE_QUESTIONS = {
                 "فقر دم / أنيميا": "anemia",
                 "القولون العصبي": "ibs",
                 "ارتجاع / حموضة / جرثومة المعدة": "reflux",
+                "اخرلا" : "other",
             },
         },
         {
