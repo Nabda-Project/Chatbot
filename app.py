@@ -1,54 +1,67 @@
-# app.py
-from flask import Flask, request, jsonify, render_template, session
-from flask_cors import CORS
-from med import handle_message, reset_state
-
-import uuid
 import secrets
-from datetime import timedelta
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
+from med import handle_message, reset_session
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 CORS(app, supports_credentials=True)
+
+
+def _get_or_create_session():
+    """Return (session_id, is_new)."""
+    sid = request.cookies.get("session_id")
+    if sid:
+        return sid, False
+    return secrets.token_hex(16), True
+
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        if 'id' not in session:
-            session['id'] = str(uuid.uuid4())
-            session.permanent = True
-            
-        session_id = session['id']
-        data = request.json
-        user_msg = data.get("message", "").strip()
-        reply = handle_message(session_id, user_msg)
-        return jsonify({"success": True, "reply": reply})
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"success": False, "error": str(e), "reply": "حدث خطأ"}), 500
+        data = request.get_json(force=True, silent=True) or {}
+
+        # "message" can be str (number/text/choice) or list[str] (multi_choice)
+        payload = data.get("message", None)
+        if payload == "":
+            payload = None
+
+        session_id, is_new = _get_or_create_session()
+        result = handle_message(session_id, payload)
+
+        response = jsonify({
+            "success":  True,
+            "done":     result["done"],
+            "question": result["question"],
+            "reply":    result["reply"],
+        })
+
+        if is_new:
+            response.set_cookie("session_id", session_id, samesite="Lax")
+
+        return response
+
+    except Exception as exc:
+        return jsonify({
+            "success": False,
+            "error":   str(exc),
+            "reply":   "حدث خطأ في الخادم – الرجاء المحاولة مرة أخرى.",
+        }), 500
+
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    try:
-        if 'id' not in session:
-            session['id'] = str(uuid.uuid4())
-            session.permanent = True
-            
-        session_id = session['id']
-        reset_state(session_id)
-        return jsonify({"success": True, "reply": "تم إعادة تعيين المحادثة."})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    session_id = request.cookies.get("session_id")
+    if session_id:
+        reset_session(session_id)
+    response = jsonify({"success": True})
+    response.set_cookie("session_id", "", expires=0)
+    return response
 
-@app.route("/health", methods=["GET"])
-def health_check():
-    return jsonify({"status": "healthy", "service": "Medical Chatbot API"})
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True)
