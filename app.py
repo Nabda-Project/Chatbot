@@ -6,7 +6,6 @@ from med import handle_message, reset_session
 
 app = Flask(__name__)
 
-# 🔥 مهم جداً للكوكيز
 CORS(app, supports_credentials=True)
 
 # ================= SESSION =================
@@ -26,7 +25,7 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        print("🔥 Incoming request")
+        print("Incoming request")
 
         data = request.get_json(force=True, silent=True) or {}
         payload = data.get("message", None)
@@ -57,9 +56,9 @@ def chat():
         return response
 
     except Exception as exc:
-        print("❌ ERROR:", exc)
+        print("ERROR:", exc)
         import traceback
-        traceback.print_exc()  # 🔥 طباعة الخطأ بالتفصيل
+        traceback.print_exc()  
 
         return jsonify({
             "success": False,
@@ -82,7 +81,7 @@ def reset():
 
 
 if __name__ == "__main__":
-    # 🔥 زيادة timeout للخادم
+    
     from werkzeug.serving import WSGIRequestHandler
-    WSGIRequestHandler.timeout = 300  # 5 دقائق
-    app.run(debug=True, threaded=True)  # 🔥 threaded=True مهم
+    WSGIRequestHandler.timeout = 300  
+    app.run(debug=True, threaded=True)  

@@ -555,7 +555,7 @@ def _next_stage_question(state: ConversationState) -> dict | None:
     return None
 
 
-# ==================== 🔥 بناء النص العربي للنموذج ====================
+# ====================  بناء النص العربي للنموذج ====================
 
 def _translate_code(code: str, mapping: dict) -> str:
     return mapping.get(code, code)
