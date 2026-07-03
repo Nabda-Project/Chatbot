@@ -29,14 +29,14 @@ As a core component of the **[Nabda Project](https://github.com/Nabda-Project)**
 
 ## 🌟 Core Features
 
-* **Stateful Multi-Session Concurrency:** Supports multiple parallel chats simultaneously. Flask manages session tracking using secure cookie-based session identifiers (`session_id`) and automatically cleanses session history to optimize memory usage.
-* **Arabic NLP & Text Normalization:** Built-in normalization filters diacritics, varying representations of characters (e.g., hamzas), and ignores English characters in text fields to ensure robust, predictable Arabic parser matching.
-* **Dynamic Symptom Deep-Dive Loops:** If a patient selects specific cardiac symptoms (e.g., chest pain, dyspnea, palpitations), the engine enters a dynamic sub-question loop for each symptom, requesting severity, pattern, triggers, and localized details (e.g., pain radiation or posture-induced breathlessness).
-* **Asynchronous AI Diagnostic Client:** Features a robust polling client that submits case summaries to a remote GPU-backed diagnostic AI endpoint, polls job status URLs (`poll_url`) with a backoff interval, and handles retries or timeouts gracefully.
-* **Structured Clinical Reporting:** Generates dual-format outputs upon completing an intake session:
+- **Stateful Multi-Session Concurrency:** Supports multiple parallel chats simultaneously. Flask manages session tracking using secure cookie-based session identifiers (`session_id`) and automatically cleanses session history to optimize memory usage.
+- **Arabic NLP & Text Normalization:** Built-in normalization filters diacritics, varying representations of characters (e.g., hamzas), and ignores English characters in text fields to ensure robust, predictable Arabic parser matching.
+- **Dynamic Symptom Deep-Dive Loops:** If a patient selects specific cardiac symptoms (e.g., chest pain, dyspnea, palpitations), the engine enters a dynamic sub-question loop for each symptom, requesting severity, pattern, triggers, and localized details (e.g., pain radiation or posture-induced breathlessness).
+- **Asynchronous AI Diagnostic Client:** Features a robust polling client that submits case summaries to a remote GPU-backed diagnostic AI endpoint, polls job status URLs (`poll_url`) with a backoff interval, and handles retries or timeouts gracefully.
+- **Structured Clinical Reporting:** Generates dual-format outputs upon completing an intake session:
   - **Structured JSON Report:** For automated backend storage and database serialization.
   - **Formatted Arabic Narrative & Clinical Summary:** For direct reading by cardiologists.
-* **Spring Boot Sync Ready:** Structured to post the resulting intake report to the central Java Spring Boot REST endpoints to build a unified patient health record.
+- **Spring Boot Sync Ready:** Structured to post the resulting intake report to the central Java Spring Boot REST endpoints to build a unified patient health record.
 
 ---
 
@@ -124,41 +124,50 @@ Chatbot/
 ## 🛠️ Setup & Installation
 
 ### Prerequisites
+
 * **Python 3.8+**
-* **Pip** (Python Package Installer)
-* **Git**
+- **Pip** (Python Package Installer)
+- **Git**
 
 ### Step-by-Step Installation
 
 1. **Clone the Repository:**
+
    ```bash
    git clone https://github.com/Nabda-Project/Chatbot.git
    cd Chatbot
    ```
 
 2. **Establish a Virtual Environment:**
-   * **Windows (PowerShell/CMD):**
+   - **Windows (PowerShell/CMD):**
+
      ```powershell
      python -m venv .venv
      .venv\Scripts\activate
      ```
-   * **macOS/Linux:**
+
+   - **macOS/Linux:**
+
      ```bash
      python3 -m venv .venv
      source .venv/bin/activate
      ```
 
 3. **Install Dependencies:**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 4. **Configure Environment Variables:**
    Copy the example environment file:
+
    ```bash
    cp .env.example .env
    ```
+
    Open `.env` and fill in your keys:
+
    ```properties
    GOOGLE_API_KEY=your-google-gemini-key
    BACKEND_URL=http://localhost:9091
@@ -171,20 +180,27 @@ Chatbot/
 ## 🚀 Usage & Script Utilities
 
 ### 1. Web Interactive Mode (Default)
+
 Start the local Flask development server:
+
 ```bash
 python app.py
 ```
+
 By default, the server runs on `http://100.51.212.220:5000` or `http://127.0.0.1:5000`. Navigate to the address in your browser to access the responsive RTL web UI.
 
 ### 2. Command-Line (CLI) Interactive Chat
+
 To run the intake state machine directly in your terminal for debugging and testing:
+
 ```bash
 python med.py
 ```
 
 ### 3. Report Conversion Utility
+
 Convert generated patient JSON reports into clean, physician-friendly text layouts:
+
 ```bash
 # Convert a single report
 python json_to_txt.py ./patient_records/report_180835.json
@@ -197,7 +213,9 @@ python json_to_txt.py --dir ./patient_records --out ./patient_records/formatted_
 ```
 
 ### 4. Diagnostic AI Client Utility
+
 Interface directly with the GPU-based diagnostic model to query and poll responses:
+
 ```bash
 # Interactive CLI prompting mode
 python model_client.py
@@ -224,14 +242,16 @@ echo "أعاني من تسارع شديد في ضربات القلب" | python m
 
 ### `/chat` Request Specs
 
-* **Request Payload Format:**
+- **Request Payload Format:**
+
   ```json
   {
     "message": "نعم، أشعر بألم مستمر في الصدر"
   }
   ```
 
-* **Intermediate Response Format (More Questions):**
+- **Intermediate Response Format (More Questions):**
+
   ```json
   {
     "success": true,
@@ -249,7 +269,8 @@ echo "أعاني من تسارع شديد في ضربات القلب" | python m
   }
   ```
 
-* **Final Response Format (Intake Complete):**
+- **Final Response Format (Intake Complete):**
+
   ```json
   {
     "success": true,
