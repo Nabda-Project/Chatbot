@@ -5,9 +5,14 @@
 [![Nabda Project](https://img.shields.io/badge/organization-Nabda--Project-red.svg)](https://github.com/Nabda-Project)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Smart Heart Assistant** is an intelligent, conversational Arabic medical chatbot designed to assist patients in pre-screening for cardiovascular conditions. By conducting structured, step-by-step interviews in Arabic, the bot collects key demographic information, lifestyle habits, medical history, family history, and current cardiac symptoms. 
+This folder contains the source code for the **Smart Heart Assistant** (مساعد القلب الذكي) chatbot service.
 
-This chatbot is a core mid-tier service of the **[Nabda Project](https://github.com/Nabda-Project)**, an integrated graduation project focused on cardiovascular healthcare, and is fully integrated with a companion graduation thesis and LaTeX project book.
+### Role in the Nabda Project
+As a key component of the **[Nabda Project](https://github.com/Nabda-Project)** (a connected cardiovascular healthcare system), the role of this service is to:
+1. Conduct friendly, conversational Arabic pre-screening interviews with patients.
+2. Collect and validate demographic details, medical history, lifestyle factors, and specific cardiac symptoms.
+3. Automatically generate structured JSON/text reports of the patient's condition.
+4. Synchronize patient intake reports directly with the central Spring Boot backend database to assist doctors during subsequent clinical consultations.
 
 ---
 
@@ -16,19 +21,20 @@ This chatbot is a core mid-tier service of the **[Nabda Project](https://github.
 - [Overview](#overview)
 - [Architecture & Data Flow](#architecture--data-flow)
 - [Conversation Pipeline](#conversation-pipeline)
-- [Key Features](#key-features)
+- [Key Technical Features](#key-technical-features)
 - [Project Directory Structure](#project-directory-structure)
 - [Setup & Installation](#setup--installation)
 - [Usage & Execution Modes](#usage--execution-modes)
 - [API Documentation](#api-documentation)
 - [Future Roadmap](#future-roadmap)
 - [Medical Disclaimer](#medical-disclaimer)
+- [License](#license)
 
 ---
 
 ## Overview
 
-Traditional medical intake forms can be tedious and prone to incomplete entries. **Smart Heart Assistant** solves this by offering a friendly, conversational interface in Arabic. It utilizes:
+Traditional medical intake forms can be tedious and prone to incomplete entries. This chatbot solves this by offering a friendly, conversational interface in Arabic. The service utilizes:
 1. **Linear State Machine Pipeline:** Guides the user sequentially through Demographics, History, and Symptom assessment.
 2. **Dynamic Symptom Loops:** Recursively queries specific details (severity, duration, triggers, relieving factors) for each reported symptom.
 3. **Medical Advice Engine:** Analyzes collected indicators (e.g., BMI, smoking status, symptom severity) to generate localized Arabic health advice.
@@ -41,7 +47,7 @@ Traditional medical intake forms can be tedious and prone to incomplete entries.
 
 ## Architecture & Data Flow
 
-The assistant acts as a mid-tier NLP processing engine that sits between the client application and the main backend architecture:
+The assistant acts as a mid-tier NLP processing engine that sits between the client application, the diagnostic AI model, and the main backend architecture:
 
 ```mermaid
 graph TD
@@ -52,17 +58,21 @@ graph TD
     subgraph Mid [Mid-Tier Chatbot Service]
         B["app.py<br/>(Flask Router & Session Management)"]
         C["med.py<br/>(State Machine & Arabic NLP Parser)"]
+        F["model_client.py<br/>(Diagnostic LLM Client)"]
     end
 
-    subgraph Core [Core Backend]
+    subgraph Core [Core Backend & Models]
         D["Java Spring Boot Backend<br/>(Patient Database Controller)"]
+        E["Diagnostic AI Endpoint<br/>(Asynchronous GPU Server)"]
     end
 
     A -->|"POST /chat<br/>(Message payload & Session cookies)"| B
     B -->|"handle_message(sid, msg)"| C
-    C -->|"1. Local Log"| E[("patient_records/<br/>(JSON & TXT)")]
+    C -->|"1. Local Log"| G[("patient_records/<br/>(JSON & TXT)")]
     C -->|"2. POST API Relay"| D
-    C -->|"3. Formulate Response"| B
+    C -->|"3. Call Model (as needed)"| F
+    F -->|"4. Async Job Submit / Poll"| E
+    C -->|"5. Formulate Response"| B
     B -->|"JSON reply"| A
 ```
 
@@ -94,11 +104,12 @@ The bot structures the Arabic conversation across 6 sequential stages:
 
 ---
 
-## Key Features
+## Key Technical Features
 
 - **Arabic NLP Normalization:** Normalizes diacritics, hamzas, and letters (e.g., matching "ألم" with "الم") to ensure robust parsing of patient inputs.
 - **Stateful Multi-Session Concurrency:** Supports multiple simultaneous chats using secure session tracking. Inactive sessions are cleared automatically after 2 hours to optimize memory.
 - **Comprehensive Symptom Deep-Dive:** Adapts dynamically depending on symptoms selected, drilling down into exact characteristics (e.g., pain quality, chest pain radiation, trigger thresholds).
+- **Asynchronous AI Diagnostic Client:** Support for submitting diagnostic summaries to the AI diagnostic endpoint with a robust job queue, status polling, and automatic retry mechanisms.
 - **Dual-Format Reporting:** Saves output reports locally as standard JSON (for backend serialization) and formatted text (for direct physician reading).
 - **Spring Boot Sync:** Automated REST API synchronization to persist results directly in the master health record system.
 
@@ -158,7 +169,7 @@ Chatbot/
    ```
 
 4. **Configure Environment Variables:**
-   Create a `.env` file in the root directory (you can copy sample values) and supply your configuration keys:
+   Create a `.env` file in the root directory and supply your configuration keys:
    ```properties
    GOOGLE_API_KEY=your-google-gemini-key
    BACKEND_URL=http://localhost:9091
@@ -178,7 +189,7 @@ python app.py
 The server will boot on `http://localhost:5000`. Open this address in your browser to access the interactive chat interface.
 
 ### 2. Command-Line (CLI) Chat Mode
-Run the chatbot engine directly inside the terminal for debugging:
+Run the chatbot engine directly inside the terminal for interactive testing and debugging:
 ```bash
 python med.py
 ```
@@ -189,8 +200,24 @@ Convert generated patient JSON reports into human-readable text documents:
 # Convert a single report
 python json_to_txt.py ./patient_records/report_180835.json
 
-# Convert all reports in a directory
-python json_to_txt.py --dir ./patient_records --out ./patient_records
+# Convert multiple reports
+python json_to_txt.py report_1.json report_2.json
+
+# Convert all reports in a directory and output to a custom directory
+python json_to_txt.py --dir ./patient_records --out ./patient_records/text_reports
+```
+
+### 4. Diagnostic AI Test Client
+Test communication with the remote AI diagnostic endpoint (including queuing and polling status updates):
+```bash
+# Interactive mode (prompts you for input text)
+python model_client.py
+
+# One-shot mode (pass text directly)
+python model_client.py "أشعر بألم شديد في الصدر وضيق تنفس"
+
+# Pipe mode (pipe input text)
+echo "أشعر بألم شديد في الصدر وضيق تنفس" | python model_client.py -
 ```
 
 ---
@@ -241,6 +268,10 @@ python json_to_txt.py --dir ./patient_records --out ./patient_records
 > This chatbot is a supportive clinical intake screening application and **does not constitute professional medical advice, diagnosis, or treatment**. Always seek the advice of a qualified healthcare provider for any questions regarding a medical condition. **If you are experiencing severe chest pain, breathlessness, or immediate medical discomfort, please contact your local emergency services (e.g., 123 in Egypt) immediately.**
 
 ---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 <p align="center">
   Created by the <b>Nabda Project</b> Team.
