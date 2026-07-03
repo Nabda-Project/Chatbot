@@ -1,4 +1,4 @@
-# مساعد القلب الذكي — Smart Heart Assistant
+# 🫀 مساعد القلب الذكي — Smart Heart Assistant
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg?style=flat-square)](https://www.python.org/)
 [![Flask Framework](https://img.shields.io/badge/framework-Flask-lightgrey.svg?style=flat-square)](https://flask.palletsprojects.com/)
@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![CORS Supported](https://img.shields.io/badge/CORS-enabled-brightgreen.svg?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 
-The **Smart Heart Assistant** (مساعد القلب الذكي) is an intelligent, conversational medical intake chatbot designed for Arabic-speaking patients. By guiding users through a friendly, natural conversation instead of a static form, it gathers comprehensive demographic, lifestyle, medical history, and cardiac symptom data.
+The **Smart Heart Assistant** (مساعد القلب الذكي) is an intelligent, conversational medical intake chatbot designed specifically for Arabic-speaking patients. By guiding users through a friendly, natural conversation instead of a static form, it gathers comprehensive demographic, lifestyle, medical history, and cardiac symptom data.
 
 As a core component of the **[Nabda Project](https://github.com/Nabda-Project)** (a connected cardiovascular healthcare ecosystem), this chatbot automatically generates structured case summaries and clinical reports, saving them locally and synchronizing them with a primary Spring Boot backend to assist physicians during clinical consultations.
 
@@ -21,6 +21,8 @@ As a core component of the **[Nabda Project](https://github.com/Nabda-Project)**
 - [Setup & Installation](#%EF%B8%8F-setup--installation)
 - [Usage & Script Utilities](#-usage--script-utilities)
 - [API Reference](#-api-reference)
+- [Technical Internals](#-technical-internals)
+- [Data Security & Environment Protection](#-data-security--environment-protection)
 - [Future Roadmap](#-future-roadmap)
 - [Medical Disclaimer](#-medical-disclaimer)
 - [License](#-license)
@@ -81,7 +83,8 @@ graph TD
     RedFlags --> FreeText["6. Free Text Notes<br/>(Additional info)"]
     FreeText --> BuildNarrative["Build Arabic Case Narrative"]
     BuildNarrative --> CallAI["Call Diagnostic AI Server"]
-    CallAI --> SaveReport["Save JSON & TXT Reports"]
+    SaveReport["Save JSON & TXT Reports"]
+    CallAI --> SaveReport
     SaveReport --> Complete(["End Chat & Sync"])
 ```
 
@@ -100,24 +103,16 @@ graph TD
 
 ## 📂 Project Directory Structure
 
-```text
-Chatbot/
-├── .env                       # Active environment configurations (API keys, backend URLs)
-├── .env.example               # Template environment configuration file
-├── .gitignore                 # Version control ignores (__pycache__, .venv, .env)
-├── README.md                  # Comprehensive project documentation
-├── requirements.txt           # Python library dependencies
-├── app.py                     # Flask web server entry point, CORS config, and HTTP routes
-├── med.py                     # Core state machine, question banks, NLP parsers, and AI callers
-├── model_client.py            # CLI client for diagnosing and polling AI endpoints
-├── json_to_txt.py             # Utility converting generated JSON reports to formatted text
-├── test_med_api.py            # Integration test script for the diagnostic endpoint
-├── templates/
-│   └── index.html             # Rich web frontend UI (HTML, responsive CSS, and interactive JS)
-├── patient_records/           # Output directory for saved JSON and TXT patient reports
-├── patient_data/              # Directory with demo datasets and reference models
-└── under_dev/                 # Folder containing experimental features (e.g. stage_questions.py)
-```
+Below is the directory layout of the repository. Click the file links to view the source files directly:
+
+- [app.py](file:///E:/side%20projects/GP/Chatbot/app.py) — The Flask web server entry point containing CORS config, session setup, and HTTP routes.
+- [med.py](file:///E:/side%20projects/GP/Chatbot/med.py) — Core state machine, question banks, translation maps, dynamic symptom engines, and NLP utility parsers.
+- [model_client.py](file:///E:/side%20projects/GP/Chatbot/model_client.py) — Interactive and command-line diagnostic client that polls remote AI endpoints.
+- [json_to_txt.py](file:///E:/side%20projects/GP/Chatbot/json_to_txt.py) — Utility script to convert generated patient JSON reports into clean, human-readable text layouts for doctors.
+- [test_med_api.py](file:///E:/side%20projects/GP/Chatbot/test_med_api.py) — Integration test script that exercises the diagnostic GPU endpoints.
+- [templates/index.html](file:///E:/side%20projects/GP/Chatbot/templates/index.html) — Elegant, responsive Arabic RTL chat frontend interface with custom styling and animations.
+- [.gitignore](file:///E:/side%20projects/GP/Chatbot/.gitignore) — Tells Git which untracked files (e.g. `.env`, `.venv`, log summaries) to ignore.
+- [.env.example](file:///E:/side%20projects/GP/Chatbot/.env.example) — Config environment variable template.
 
 ---
 
@@ -126,48 +121,40 @@ Chatbot/
 ### Prerequisites
 
 * **Python 3.8+**
-- **Pip** (Python Package Installer)
-- **Git**
+* **Pip** (Python Package Installer)
+* **Git**
 
 ### Step-by-Step Installation
 
 1. **Clone the Repository:**
-
    ```bash
    git clone https://github.com/Nabda-Project/Chatbot.git
    cd Chatbot
    ```
 
 2. **Establish a Virtual Environment:**
-   - **Windows (PowerShell/CMD):**
-
+   * **Windows (PowerShell):**
      ```powershell
      python -m venv .venv
      .venv\Scripts\activate
      ```
-
-   - **macOS/Linux:**
-
+   * **macOS/Linux:**
      ```bash
      python3 -m venv .venv
      source .venv/bin/activate
      ```
 
 3. **Install Dependencies:**
-
    ```bash
    pip install -r requirements.txt
    ```
 
 4. **Configure Environment Variables:**
-   Copy the example environment file:
-
+   Copy the example environment template to create your own local configuration:
    ```bash
    cp .env.example .env
    ```
-
-   Open `.env` and fill in your keys:
-
+   Open the newly created `.env` file and insert your API keys and endpoints:
    ```properties
    GOOGLE_API_KEY=your-google-gemini-key
    BACKEND_URL=http://localhost:9091
@@ -180,32 +167,25 @@ Chatbot/
 ## 🚀 Usage & Script Utilities
 
 ### 1. Web Interactive Mode (Default)
-
 Start the local Flask development server:
-
 ```bash
 python app.py
 ```
-
-By default, the server runs on `http://100.51.212.220:5000` or `http://127.0.0.1:5000`. Navigate to the address in your browser to access the responsive RTL web UI.
+By default, the server runs on `http://127.0.0.1:5000`. Navigate to the address in your browser to access the responsive RTL web UI.
 
 ### 2. Command-Line (CLI) Interactive Chat
-
-To run the intake state machine directly in your terminal for debugging and testing:
-
+To run the intake state machine directly inside your terminal (great for debugging and workflow testing):
 ```bash
 python med.py
 ```
 
 ### 3. Report Conversion Utility
-
-Convert generated patient JSON reports into clean, physician-friendly text layouts:
-
+Convert generated patient JSON reports into clean, physician-friendly text layouts using [json_to_txt.py](file:///E:/side%20projects/GP/Chatbot/json_to_txt.py):
 ```bash
 # Convert a single report
 python json_to_txt.py ./patient_records/report_180835.json
 
-# Convert multiple reports
+# Convert multiple reports at once
 python json_to_txt.py report_1.json report_2.json
 
 # Convert all reports in a directory and export to a specific output path
@@ -213,9 +193,7 @@ python json_to_txt.py --dir ./patient_records --out ./patient_records/formatted_
 ```
 
 ### 4. Diagnostic AI Client Utility
-
-Interface directly with the GPU-based diagnostic model to query and poll responses:
-
+Interface directly with the GPU-based diagnostic model to query and poll responses using [model_client.py](file:///E:/side%20projects/GP/Chatbot/model_client.py):
 ```bash
 # Interactive CLI prompting mode
 python model_client.py
@@ -235,23 +213,21 @@ echo "أعاني من تسارع شديد في ضربات القلب" | python m
 
 | Method | Endpoint | Description | Headers |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/` | Serves the HTML frontend interface. | — |
-| `POST` | `/chat` | Submits the user input and returns the next question or the final clinical report. | `Content-Type: application/json` |
+| `GET` | `/` | Serves the HTML frontend interface ([templates/index.html](file:///E:/side%20projects/GP/Chatbot/templates/index.html)). | — |
+| `POST` | `/chat` | Submits user message and returns the next question or the final clinical diagnosis report. | `Content-Type: application/json` |
 | `POST` | `/reset` | Resets the active session state and clears session cookies. | — |
 | `GET` | `/health` | Simple health check endpoint returning microservice uptime status. | — |
 
 ### `/chat` Request Specs
 
-- **Request Payload Format:**
-
+* **Request Payload Format:**
   ```json
   {
     "message": "نعم، أشعر بألم مستمر في الصدر"
   }
   ```
 
-- **Intermediate Response Format (More Questions):**
-
+* **Intermediate Response Format (More Questions):**
   ```json
   {
     "success": true,
@@ -262,15 +238,19 @@ echo "أعاني من تسارع شديد في ضربات القلب" | python m
       "type": "multi_choice",
       "options": [
         {"label": "لا ينتشر", "value": "no_radiation"},
-        {"label": "الذراع / الكتف / اليد اليسرى", "value": "left_arm"}
+        {"label": "الذراع / الكتف / اليد اليسرى", "value": "left_arm"},
+        {"label": "الذراع / الكتف / اليد اليمنى", "value": "right_arm"},
+        {"label": "الظهر / بين الكتفين", "value": "back"},
+        {"label": "الرقبة", "value": "neck"},
+        {"label": "الفك أو الأسنان", "value": "jaw"},
+        {"label": "أعلى البطن", "value": "upper_abdomen"}
       ]
     },
     "reply": "هل ينتشر ألم الصدر إلى مناطق أخرى؟ (اختر كل ما ينطبق)"
   }
   ```
 
-- **Final Response Format (Intake Complete):**
-
+* **Final Response Format (Intake Complete):**
   ```json
   {
     "success": true,
@@ -285,6 +265,31 @@ echo "أعاني من تسارع شديد في ضربات القلب" | python m
     "reply": "📋 انتهينا من جمع البيانات... [الملخص السريري والتحليل الطبي المتكامل]"
   }
   ```
+
+---
+
+## ⚙️ Technical Internals
+
+### Stateful Engine & Stage Management
+The main conversational handler [handle_message](file:///E:/side%20projects/GP/Chatbot/med.py#L650) in `med.py` is powered by a state machine that tracks each session using a local memory store. 
+1. When a message is received, [_get_or_create_session](file:///E:/side%20projects/GP/Chatbot/app.py#L12) in `app.py` loads the state.
+2. The user's input is validated and parsed using [smart_parse](file:///E:/side%20projects/GP/Chatbot/med.py#L309).
+3. The engine uses a dependency evaluation routine ([check_depends](file:///E:/side%20projects/GP/Chatbot/med.py#L371)) to check if optional questions (such as pregnancy status depending on the patient's sex) should be asked.
+4. If a dynamic symptom loop is entered, the engine queues and traverses symptom-specific questions built on the fly by [_build_known_symptom_questions](file:///E:/side%20projects/GP/Chatbot/med.py#L252).
+
+### Text Normalization & Security Filter
+To maintain clinical safety:
+- User free-text notes are stripped of English characters using regex filters to ensure only Arabic notes are relayed to downstream diagnostic APIs.
+- Diacritics are removed, and typical character variants in Arabic (e.g. `أ`, `إ`, `آ`, `ة`, `ى`) are normalized to ensure robust option selections.
+
+---
+
+## 🔒 Data Security & Environment Protection
+
+To prevent credentials from leaking into Git version history:
+- Sensitive variables (API keys, JWT authorization headers, server endpoints) must be configured in a local `.env` file.
+- The `.gitignore` file is strictly configured to ignore the `.env` file and any generated security reports (such as `gitleaks-report.json` or `replacements.txt`).
+- **Never commit active API keys.** Ensure placeholder configurations are used for code bases before publishing.
 
 ---
 
