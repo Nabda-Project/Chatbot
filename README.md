@@ -1,147 +1,132 @@
 # مساعد القلب الذكي — Smart Heart Assistant
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
-[![Flask Framework](https://img.shields.io/badge/framework-Flask-lightgrey.svg)](https://flask.palletsprojects.com/)
-[![Nabda Project](https://img.shields.io/badge/organization-Nabda--Project-red.svg)](https://github.com/Nabda-Project)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg?style=flat-square)](https://www.python.org/)
+[![Flask Framework](https://img.shields.io/badge/framework-Flask-lightgrey.svg?style=flat-square)](https://flask.palletsprojects.com/)
+[![Nabda Project](https://img.shields.io/badge/organization-Nabda--Project-red.svg?style=flat-square)](https://github.com/Nabda-Project)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![CORS Supported](https://img.shields.io/badge/CORS-enabled-brightgreen.svg?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 
-This folder contains the source code for the **Smart Heart Assistant** (مساعد القلب الذكي) chatbot service.
+The **Smart Heart Assistant** (مساعد القلب الذكي) is an intelligent, conversational medical intake chatbot designed for Arabic-speaking patients. By guiding users through a friendly, natural conversation instead of a static form, it gathers comprehensive demographic, lifestyle, medical history, and cardiac symptom data.
 
-### Role in the Nabda Project
-As a key component of the **[Nabda Project](https://github.com/Nabda-Project)** (a connected cardiovascular healthcare system), the role of this service is to:
-1. Conduct friendly, conversational Arabic pre-screening interviews with patients.
-2. Collect and validate demographic details, medical history, lifestyle factors, and specific cardiac symptoms.
-3. Automatically generate structured JSON/text reports of the patient's condition.
-4. Synchronize patient intake reports directly with the central Spring Boot backend database to assist doctors during subsequent clinical consultations.
+As a core component of the **[Nabda Project](https://github.com/Nabda-Project)** (a connected cardiovascular healthcare ecosystem), this chatbot automatically generates structured case summaries and clinical reports, saving them locally and synchronizing them with a primary Spring Boot backend to assist physicians during clinical consultations.
 
 ---
 
-## Table of Contents
+## 📖 Table of Contents
 
-- [Overview](#overview)
-- [Architecture & Data Flow](#architecture--data-flow)
-- [Conversation Pipeline](#conversation-pipeline)
-- [Key Technical Features](#key-technical-features)
-- [Project Directory Structure](#project-directory-structure)
-- [Setup & Installation](#setup--installation)
-- [Usage & Execution Modes](#usage--execution-modes)
-- [API Documentation](#api-documentation)
-- [Future Roadmap](#future-roadmap)
-- [Medical Disclaimer](#medical-disclaimer)
-- [License](#license)
-
----
-
-## Overview
-
-Traditional medical intake forms can be tedious and prone to incomplete entries. This chatbot solves this by offering a friendly, conversational interface in Arabic. The service utilizes:
-1. **Linear State Machine Pipeline:** Guides the user sequentially through Demographics, History, and Symptom assessment.
-2. **Dynamic Symptom Loops:** Recursively queries specific details (severity, duration, triggers, relieving factors) for each reported symptom.
-3. **Medical Advice Engine:** Analyzes collected indicators (e.g., BMI, smoking status, symptom severity) to generate localized Arabic health advice.
-4. **Backend Database Synchronization:** Securely relays the structured JSON report to the central Java Spring Boot backend database.
-
-> [!NOTE]
-> Detailed theoretical frameworks, design patterns, and engineering choices are fully documented in the companion **[Graduation Project Book](https://github.com/Nabda-Project)**.
+- [Core Features](#-core-features)
+- [Architecture & Data Flow](#-architecture--data-flow)
+- [Conversational Pipeline Stages](#-conversational-pipeline-stages)
+- [Project Directory Structure](#-project-directory-structure)
+- [Setup & Installation](#%EF%B8%8F-setup--installation)
+- [Usage & Script Utilities](#-usage--script-utilities)
+- [API Reference](#-api-reference)
+- [Future Roadmap](#-future-roadmap)
+- [Medical Disclaimer](#-medical-disclaimer)
+- [License](#-license)
 
 ---
 
-## Architecture & Data Flow
+## 🌟 Core Features
 
-The assistant acts as a mid-tier NLP processing engine that sits between the client application, the diagnostic AI model, and the main backend architecture:
+* **Stateful Multi-Session Concurrency:** Supports multiple parallel chats simultaneously. Flask manages session tracking using secure cookie-based session identifiers (`session_id`) and automatically cleanses session history to optimize memory usage.
+* **Arabic NLP & Text Normalization:** Built-in normalization filters diacritics, varying representations of characters (e.g., hamzas), and ignores English characters in text fields to ensure robust, predictable Arabic parser matching.
+* **Dynamic Symptom Deep-Dive Loops:** If a patient selects specific cardiac symptoms (e.g., chest pain, dyspnea, palpitations), the engine enters a dynamic sub-question loop for each symptom, requesting severity, pattern, triggers, and localized details (e.g., pain radiation or posture-induced breathlessness).
+* **Asynchronous AI Diagnostic Client:** Features a robust polling client that submits case summaries to a remote GPU-backed diagnostic AI endpoint, polls job status URLs (`poll_url`) with a backoff interval, and handles retries or timeouts gracefully.
+* **Structured Clinical Reporting:** Generates dual-format outputs upon completing an intake session:
+  - **Structured JSON Report:** For automated backend storage and database serialization.
+  - **Formatted Arabic Narrative & Clinical Summary:** For direct reading by cardiologists.
+* **Spring Boot Sync Ready:** Structured to post the resulting intake report to the central Java Spring Boot REST endpoints to build a unified patient health record.
+
+---
+
+## ⚙️ Architecture & Data Flow
+
+The mid-tier Flask service coordinates NLP processing, local logging, and downstream API relays:
 
 ```mermaid
 graph TD
-    subgraph Client [Client Tier]
-        A["Browser Client (HTML5/JS)<br/>index.html"] 
+    A["Browser Client<br/>(templates/index.html)"] -->|"POST /chat<br/>(Message payload + Cookies)"| B["Flask Web Server<br/>(app.py)"]
+    B -->|"handle_message(sid, message)"| C["State & Intake Engine<br/>(med.py)"]
+    
+    subgraph Data & Downstream Tier
+        C -->|"Saves JSON & TXT"| D[("patient_records/<br/>(Local Storage)")]
+        C -->|"POST /generate (Submit Job)"| E["Diagnostic AI Endpoint<br/>(Async GPU Server)"]
+        E -->|"Returns Job URL"| C
+        C -->|"GET /jobs/id (Poll status)"| E
+        C -->|"Relays Case Summary<br/>(REST API Sync)"| F["Spring Boot Backend<br/>(Central DB)"]
     end
-
-    subgraph Mid [Mid-Tier Chatbot Service]
-        B["app.py<br/>(Flask Router & Session Management)"]
-        C["med.py<br/>(State Machine & Arabic NLP Parser)"]
-        F["model_client.py<br/>(Diagnostic LLM Client)"]
-    end
-
-    subgraph Core [Core Backend & Models]
-        D["Java Spring Boot Backend<br/>(Patient Database Controller)"]
-        E["Diagnostic AI Endpoint<br/>(Asynchronous GPU Server)"]
-    end
-
-    A -->|"POST /chat<br/>(Message payload & Session cookies)"| B
-    B -->|"handle_message(sid, msg)"| C
-    C -->|"1. Local Log"| G[("patient_records/<br/>(JSON & TXT)")]
-    C -->|"2. POST API Relay"| D
-    C -->|"3. Call Model (as needed)"| F
-    F -->|"4. Async Job Submit / Poll"| E
-    C -->|"5. Formulate Response"| B
-    B -->|"JSON reply"| A
+    
+    C -->|"Formulates next prompt"| B
+    B -->|"Returns JSON response"| A
 ```
-
-### Main Flow Logic:
-1. The **Browser UI** submits messages to Flask's `/chat` endpoint.
-2. Flask identifies the user session (or spins up a new one using secure cookies) and calls `med.py`.
-3. The chatbot evaluates if there's a pending question:
-   - **Yes:** Normalizes, validates, and stores the user's input.
-   - **No:** Advances the conversation to the next stage or symptom question.
-4. Once all stages are completed:
-   - Generates a localized Arabic medical summary.
-   - Writes patient data to a local `patient_records/report_*.json` file.
-   - Automatically relays the structured report as a payload to the Spring Boot REST endpoint (`/api/chatbot/complete?patientId={id}`).
 
 ---
 
-## Conversation Pipeline
+## 💬 Conversational Pipeline Stages
 
-The bot structures the Arabic conversation across 6 sequential stages:
+The intake engine guides users through 6 distinct stages, validating and converting natural inputs into medical code representations:
 
-| Stage | Focus Area | Arabic Sample Question | Validation Types |
+```mermaid
+graph TD
+    Start(["Start Chat"]) --> Demographics["1. Demographics<br/>(Age, Sex, Height, Weight)"]
+    Demographics --> History["2. Medical History<br/>(Chronic Diseases, Meds, Lifestyle)"]
+    History --> SymptomSelection["3. Symptom Selection<br/>(Multi-choice checklist)"]
+    SymptomSelection --> SymptomLoop{"4. Dynamic Symptom Loop"}
+    
+    SymptomLoop -->|"For each chosen symptom"| AskDetails["Ask Severity, Triggers, Patterns, and Extras"]
+    AskDetails --> SymptomLoop
+    
+    SymptomLoop -->|"Loop Finished"| RedFlags["5. Red Flags Screening<br/>(Urgent signs check)"]
+    RedFlags --> FreeText["6. Free Text Notes<br/>(Additional info)"]
+    FreeText --> BuildNarrative["Build Arabic Case Narrative"]
+    BuildNarrative --> CallAI["Call Diagnostic AI Server"]
+    CallAI --> SaveReport["Save JSON & TXT Reports"]
+    SaveReport --> Complete(["End Chat & Sync"])
+```
+
+### Breakdown of Stages
+
+| Stage | Focus Area | Arabic Example Prompt | Validation Rules |
 | :--- | :--- | :--- | :--- |
-| **1. GREETING** | Welcome & Info consent | مرحباً بك في مساعد القلب الذكي | Free text / Any input to start |
-| **2. DEMOGRAPHICS** | Gender, Age, Height, Weight | كم عمرك؟ / ما هو وزنك بالكيلوجرام؟ | Number limits (1-110), Choice |
-| **3. LIFESTYLE & HISTORY**| Smoking, Activity, Chronic conditions, Meds | هل تدخن؟ / هل تعاني من سكري أو ضغط؟ | Choices, Normalization |
-| **4. SYMPTOM SELECTION** | Multi-choice symptom picker | هل تشعر بألم في الصدر، نهجان، خفقان؟ | Choice matching (fuzzy parser) |
-| **5. SYMPTOM LOOP** | Deep-dive per selected symptom | ما شدة الألم؟ / هل ينتشر للذراع الأيسر؟ | Dynamic sub-questions |
-| **6. RED FLAG SCREENING** | Urgent critical symptoms check | هل فقدت الوعي تماماً؟ | Priority warnings logic |
+| **1. DEMOGRAPHICS** | Age, biological sex, weight, height, pregnancy status. | `كم العمر بالسنوات؟` | Number ranges (Age: 1-110, Weight: 3-300 kg, Height: 50-250 cm). |
+| **2. HISTORY** | Prior cardiac conditions, tests, chronic illnesses, active medications, family history, and smoking. | `هل سبق تشخيصك بمرض في القلب؟` | Fuzzy Arabic matches, choices, and multi-choice selections. |
+| **3. SYMPTOM_SELECTION** | Checkbox style checklist of common cardiac indicators. | `ما الأعراض التي تشعر بها؟` | Multi-choice list validation against pre-defined symptom labels. |
+| **4. SYMPTOM_LOOP** | Deep-dives into characteristics of *each* checked symptom. | `ما شدة [ألم الصدر] عندما تحدث؟` | Dynamically executes sub-questions for chosen symptoms. |
+| **5. RED_FLAG_SCREENING** | Checks for warning signs (exertional pain, exertional syncope). | `هل سبق أن أُغمي عليك أثناء الرياضة؟` | Yes/No/Unsure choices to screen for immediate emergency signs. |
+| **6. FREE_TEXT** | Final patient remarks before generating the report. | `هل هناك أي شيء آخر تود إضافته؟` | Free text normalized, filtering out English characters. |
 
 ---
 
-## Key Technical Features
+## 📂 Project Directory Structure
 
-- **Arabic NLP Normalization:** Normalizes diacritics, hamzas, and letters (e.g., matching "ألم" with "الم") to ensure robust parsing of patient inputs.
-- **Stateful Multi-Session Concurrency:** Supports multiple simultaneous chats using secure session tracking. Inactive sessions are cleared automatically after 2 hours to optimize memory.
-- **Comprehensive Symptom Deep-Dive:** Adapts dynamically depending on symptoms selected, drilling down into exact characteristics (e.g., pain quality, chest pain radiation, trigger thresholds).
-- **Asynchronous AI Diagnostic Client:** Support for submitting diagnostic summaries to the AI diagnostic endpoint with a robust job queue, status polling, and automatic retry mechanisms.
-- **Dual-Format Reporting:** Saves output reports locally as standard JSON (for backend serialization) and formatted text (for direct physician reading).
-- **Spring Boot Sync:** Automated REST API synchronization to persist results directly in the master health record system.
-
----
-
-## Project Directory Structure
-
-```
+```text
 Chatbot/
-├── .env                       # Environment configuration (API keys, backend URLs)
-├── .gitignore                 # Git ignore patterns
+├── .env                       # Active environment configurations (API keys, backend URLs)
+├── .env.example               # Template environment configuration file
+├── .gitignore                 # Version control ignores (__pycache__, .venv, .env)
 ├── README.md                  # Comprehensive project documentation
-├── requirements.txt           # Python dependency declarations
-├── app.py                     # Flask web server, endpoints, and CORS config
-├── med.py                     # Chatbot logic, question banks, and parsing algorithms
-├── model_client.py            # Client interface for calling diagnostic LLM endpoints
-├── json_to_txt.py             # Utility script converting JSON reports to clean TXT
-├── test_med_api.py            # API testing and validation suite
+├── requirements.txt           # Python library dependencies
+├── app.py                     # Flask web server entry point, CORS config, and HTTP routes
+├── med.py                     # Core state machine, question banks, NLP parsers, and AI callers
+├── model_client.py            # CLI client for diagnosing and polling AI endpoints
+├── json_to_txt.py             # Utility converting generated JSON reports to formatted text
+├── test_med_api.py            # Integration test script for the diagnostic endpoint
 ├── templates/
-│   └── index.html             # Rich frontend user interface (HTML/CSS/JS)
-├── patient_records/           # Automatically generated patient JSON & TXT summaries
-└── under_dev/                 # Experimental features (e.g., dynamic dependency parsing)
+│   └── index.html             # Rich web frontend UI (HTML, responsive CSS, and interactive JS)
+├── patient_records/           # Output directory for saved JSON and TXT patient reports
+├── patient_data/              # Directory with demo datasets and reference models
+└── under_dev/                 # Folder containing experimental features (e.g. stage_questions.py)
 ```
 
 ---
 
-## Setup & Installation
+## 🛠️ Setup & Installation
 
 ### Prerequisites
-* Python 3.8 or higher
-* Pip (Python Package Installer)
-* Git
+* **Python 3.8+**
+* **Pip** (Python Package Installer)
+* **Git**
 
 ### Step-by-Step Installation
 
@@ -151,13 +136,13 @@ Chatbot/
    cd Chatbot
    ```
 
-2. **Set Up a Virtual Environment:**
-   * **Windows:**
-     ```bash
+2. **Establish a Virtual Environment:**
+   * **Windows (PowerShell/CMD):**
+     ```powershell
      python -m venv .venv
      .venv\Scripts\activate
      ```
-   * **Linux/macOS:**
+   * **macOS/Linux:**
      ```bash
      python3 -m venv .venv
      source .venv/bin/activate
@@ -169,7 +154,11 @@ Chatbot/
    ```
 
 4. **Configure Environment Variables:**
-   Create a `.env` file in the root directory and supply your configuration keys:
+   Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+   Open `.env` and fill in your keys:
    ```properties
    GOOGLE_API_KEY=your-google-gemini-key
    BACKEND_URL=http://localhost:9091
@@ -179,23 +168,23 @@ Chatbot/
 
 ---
 
-## Usage & Execution Modes
+## 🚀 Usage & Script Utilities
 
-### 1. Web Application Mode (Default)
-Run the Flask server locally:
+### 1. Web Interactive Mode (Default)
+Start the local Flask development server:
 ```bash
 python app.py
 ```
-The server will boot on `http://localhost:5000`. Open this address in your browser to access the interactive chat interface.
+By default, the server runs on `http://100.51.212.220:5000` or `http://127.0.0.1:5000`. Navigate to the address in your browser to access the responsive RTL web UI.
 
-### 2. Command-Line (CLI) Chat Mode
-Run the chatbot engine directly inside the terminal for interactive testing and debugging:
+### 2. Command-Line (CLI) Interactive Chat
+To run the intake state machine directly in your terminal for debugging and testing:
 ```bash
 python med.py
 ```
 
 ### 3. Report Conversion Utility
-Convert generated patient JSON reports into human-readable text documents:
+Convert generated patient JSON reports into clean, physician-friendly text layouts:
 ```bash
 # Convert a single report
 python json_to_txt.py ./patient_records/report_180835.json
@@ -203,76 +192,101 @@ python json_to_txt.py ./patient_records/report_180835.json
 # Convert multiple reports
 python json_to_txt.py report_1.json report_2.json
 
-# Convert all reports in a directory and output to a custom directory
-python json_to_txt.py --dir ./patient_records --out ./patient_records/text_reports
+# Convert all reports in a directory and export to a specific output path
+python json_to_txt.py --dir ./patient_records --out ./patient_records/formatted_summaries
 ```
 
-### 4. Diagnostic AI Test Client
-Test communication with the remote AI diagnostic endpoint (including queuing and polling status updates):
+### 4. Diagnostic AI Client Utility
+Interface directly with the GPU-based diagnostic model to query and poll responses:
 ```bash
-# Interactive mode (prompts you for input text)
+# Interactive CLI prompting mode
 python model_client.py
 
-# One-shot mode (pass text directly)
-python model_client.py "أشعر بألم شديد في الصدر وضيق تنفس"
+# One-shot command line mode
+python model_client.py "أشعر بألم شديد في الصدر وضيق تنفس عند صعود الدرج"
 
-# Pipe mode (pipe input text)
-echo "أشعر بألم شديد في الصدر وضيق تنفس" | python model_client.py -
+# Pipe mode support
+echo "أعاني من تسارع شديد في ضربات القلب" | python model_client.py -
 ```
 
 ---
 
-## API Documentation
+## 🔌 API Reference
 
 ### Endpoints Overview
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/` | Serves the HTML frontend interface. |
-| `POST` | `/chat` | Intercepts user messages and returns the next structured chatbot question/advice. |
-| `POST` | `/reset` | Resets the current chat session and clears temporary state variables. |
-| `GET` | `/health` | Simple microservice health check. |
+| Method | Endpoint | Description | Headers |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Serves the HTML frontend interface. | — |
+| `POST` | `/chat` | Submits the user input and returns the next question or the final clinical report. | `Content-Type: application/json` |
+| `POST` | `/reset` | Resets the active session state and clears session cookies. | — |
+| `GET` | `/health` | Simple health check endpoint returning microservice uptime status. | — |
 
-### `/chat` Payload Specifications
+### `/chat` Request Specs
 
-* **Request Body:**
+* **Request Payload Format:**
   ```json
   {
-    "message": "نعم، أشعر بألم في الصدر"
+    "message": "نعم، أشعر بألم مستمر في الصدر"
   }
   ```
 
-* **Response Body:**
+* **Intermediate Response Format (More Questions):**
   ```json
   {
     "success": true,
     "done": false,
-    "question": "هل يمتد هذا الألم إلى ذراعك الأيسر أو الفك؟",
-    "reply": "هل يمتد هذا الألم إلى ذراعك الأيسر أو الفك؟"
+    "question": {
+      "field": "symptom_detail.chest_pain.radiation",
+      "question_text": "هل ينتشر ألم الصدر إلى مناطق أخرى؟ (اختر كل ما ينطبق)",
+      "type": "multi_choice",
+      "options": [
+        {"label": "لا ينتشر", "value": "no_radiation"},
+        {"label": "الذراع / الكتف / اليد اليسرى", "value": "left_arm"}
+      ]
+    },
+    "reply": "هل ينتشر ألم الصدر إلى مناطق أخرى؟ (اختر كل ما ينطبق)"
+  }
+  ```
+
+* **Final Response Format (Intake Complete):**
+  ```json
+  {
+    "success": true,
+    "done": true,
+    "question": null,
+    "analysis_result": {
+      "differential_diagnosis": "أسباب قلبية أولية محتملة نظراً لتأثر ألم الصدر بالمجهود...",
+      "urgency_level": "عالية - تتطلب استشارة طبيب قلب في أسرع وقت",
+      "suggested_tests": ["رسم قلب كهربائي ECG", "موجات فوق صوتية على القلب Echo"],
+      "immediate_advice": "تجنب أي مجهود بدني زائد والتوجه فوراً لأقرب مستشفى عند زيادة الألم"
+    },
+    "reply": "📋 انتهينا من جمع البيانات... [الملخص السريري والتحليل الطبي المتكامل]"
   }
   ```
 
 ---
 
-## Future Roadmap
+## 🗺️ Future Roadmap
 
-- [ ] **Dynamic Dependency Validation:** Fully integrate the dynamic parsing script in `under_dev/stage_questions.py` to allow multi-choice answers and relational question dependencies.
-- [ ] **IoT Vitals Synchronization:** Connect the frontend `/vitals` route endpoint simulations to active IoT biosensors to feed pulse, blood oxygen, and blood pressure directly to the conversational advisor.
-- [ ] **AI-Assisted Diagnostic Processing:** Expand the optional LLM processing capability in `model_client.py` to provide doctor-facing clinical summaries.
+- [ ] **Dynamic Question Routing:** Implement conditional stage branching from `under_dev/stage_questions.py` to support deep logical trees based on nested patient history parameters.
+- [ ] **IoT Sensor Sync:** Integrate the simulated frontend `/vitals` route with actual IoT hardware (e.g., smartwatches, pulse oximeters) to pull live heart rate, blood pressure, and SPO2 directly into the intake summary.
+- [ ] **Physician Dashboard Integrations:** Expose webhook handlers that push live conversational transcripts to the doctor's EHR (Electronic Health Record) dashboard within Nabda's clinical suite.
 
 ---
 
-## Medical Disclaimer
+## ⚠️ Medical Disclaimer
 
 > [!WARNING]
-> This chatbot is a supportive clinical intake screening application and **does not constitute professional medical advice, diagnosis, or treatment**. Always seek the advice of a qualified healthcare provider for any questions regarding a medical condition. **If you are experiencing severe chest pain, breathlessness, or immediate medical discomfort, please contact your local emergency services (e.g., 123 in Egypt) immediately.**
+> This chatbot is an intake pre-screening tool designed purely to collect clinical summaries for review by human doctors. **It does not provide professional medical diagnoses, treatments, or automated prescriptions.**
+> If you are experiencing severe chest pain, tightness, radiation of pain to your jaw/left arm, sudden loss of consciousness, or immediate health emergencies, please contact your local emergency services (e.g., **123** in Egypt, **911** in the US) immediately.
 
 ---
 
-## License
+## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Distributed under the **MIT License**. See `LICENSE` for details.
 
 <p align="center">
-  Created by the <b>Nabda Project</b> Team.
+  Developed with ❤️ by the <b>Nabda Project</b> Team.
 </p>
